@@ -784,6 +784,9 @@ export const zhHant: TranslationStructure = {
         sessionSpawningFailed: '工作階段生成失敗 - 未返回工作階段 ID。',
         startingSession: '正在啟動工作階段...',
         startNewSessionInFolder: '在此資料夾中啟動新工作階段',
+        // The chat header's menu: a new session on this one's machine and folder, or one picked on the new-session screen
+        menuNewSessionHere: '同目錄新增工作階段',
+        menuNewSessionElsewhere: '新增工作階段…',
         failedToStart: '啟動工作階段失敗。確保守護程序在目標裝置上執行。',
         sessionTimeout: '工作階段啟動逾時。裝置可能執行緩慢或守護程序可能無回應。',
         notConnectedToServer: '未連線到伺服器。請檢查您的網路連線。',
@@ -1138,6 +1141,8 @@ export const zhHant: TranslationStructure = {
         thinkingSince: '思考開始時間',
         cliVersion: 'CLI 版本',
         cliUpgradeAvailable: '有新的 CLI 版本可用',
+        // The chat header menu's row that upgrades the session
+        menuUpgradeSession: ({ version }: { version: string }) => `升級到 CLI v${version}`,
         cliUpgradeAvailableSubtitle: '點擊以使用最新 CLI 重新啟動工作階段',
         sessionUpgradeBanner: ({ version }: { version: string }) => `此工作階段可升級到 CLI v${version}`,
         cliUpgradeInProgress: '正在升級...',

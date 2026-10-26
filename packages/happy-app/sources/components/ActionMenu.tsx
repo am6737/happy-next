@@ -35,6 +35,8 @@ export interface ActionMenuItem {
     selected?: boolean;
     disabled?: boolean;
     icon?: ActionMenuIcon;
+    /** Opens a new group: iOS's native menus draw a divider above the row; the sheet, whose rows are already ruled, ignores it. */
+    startsSection?: boolean;
 }
 
 interface ActionMenuProps {

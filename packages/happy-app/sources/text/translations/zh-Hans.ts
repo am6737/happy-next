@@ -785,6 +785,9 @@ export const zhHans: TranslationStructure = {
         sessionSpawningFailed: '会话生成失败 - 未返回会话 ID。',
         startingSession: '正在启动会话...',
         startNewSessionInFolder: '在此文件夹中启动新会话',
+        // The chat header's menu: a new session on this one's machine and folder, or one picked on the new-session screen
+        menuNewSessionHere: '同目录新建会话',
+        menuNewSessionElsewhere: '新建会话…',
         failedToStart: '启动会话失败。确保守护进程在目标设备上运行。',
         sessionTimeout: '会话启动超时。设备可能运行缓慢或守护进程可能无响应。',
         notConnectedToServer: '未连接到服务器。请检查您的网络连接。',
@@ -1139,6 +1142,8 @@ export const zhHans: TranslationStructure = {
         thinkingSince: '思考开始时间',
         cliVersion: 'CLI 版本',
         cliUpgradeAvailable: '有新的 CLI 版本可用',
+        // The chat header menu's row that upgrades the session
+        menuUpgradeSession: ({ version }: { version: string }) => `升级到 CLI v${version}`,
         cliUpgradeAvailableSubtitle: '点击以使用最新 CLI 重启会话',
         sessionUpgradeBanner: ({ version }: { version: string }) => `此会话可升级到 CLI v${version}`,
         cliUpgradeInProgress: '正在升级...',

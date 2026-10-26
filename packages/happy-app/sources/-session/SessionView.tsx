@@ -13,6 +13,8 @@ import { subscribeSessionMessageJump, takeSessionMessageJump } from '@/sync/sess
 import { Deferred } from '@/components/Deferred';
 import { DuplicateSheet } from '@/components/DuplicateSheet';
 import { ActionMenuModal } from '@/components/ActionMenuModal';
+import { NativeMenu } from '@/components/NativeMenu';
+import { hapticsLight } from '@/components/haptics';
 import type { ActionMenuItem } from '@/components/ActionMenu';
 import { EmptyMessages } from '@/components/EmptyMessages';
 import { PendingQueuePanel } from '@/components/PendingQueuePanel';
@@ -20,6 +22,7 @@ import { ScheduleMessageSheet } from '@/components/ScheduleMessageSheet';
 import { subscribeScheduleAtLimit } from '@/sync/usageLimitNotice';
 import { VoiceAssistantStatusBar } from '@/components/VoiceAssistantStatusBar';
 import { useDraft } from '@/hooks/useDraft';
+import { useChatHeaderMenu } from '@/hooks/useChatHeaderMenu';
 import { DEFAULT_ALLOWED_TYPES, useImagePicker } from '@/hooks/useImagePicker';
 import { useFileAttachments } from '@/hooks/useFileAttachments';
 import { useSharedContentIntake } from '@/hooks/useSharedContentIntake';
@@ -217,6 +220,21 @@ export const SessionView = React.memo((props: { id: string }) => {
 
     const hasSession = !!session;
     const isSharedSession = !!session?.accessLevel;
+    // The + opens /new pre-filled with this session's machine and path, which only works on a
+    // machine of my own — a session shared with me points at the owner's.
+    const headerNewSession = isSharedSession ? undefined : handleNewSession;
+    const { items: headerMenu, archiveMenu: headerArchiveMenu } = useChatHeaderMenu(session, {
+        onDetails: headerProps.onAvatarPress,
+        onOpenRuns: hasRuns ? handleOpenSessionRuns : undefined,
+        onNewSessionHere: headerNewSession,
+        cliUpgrade: headerCliUpgrade,
+    });
+    const [headerMenuVisible, setHeaderMenuVisible] = React.useState(false);
+    const openHeaderMenu = React.useCallback(() => {
+        hapticsLight();
+        setHeaderMenuVisible(true);
+    }, []);
+    const closeHeaderMenu = React.useCallback(() => setHeaderMenuVisible(false), []);
     // Stack.Screen hands new options to the navigator, which re-renders the whole stack and its
     // headers, so they are rebuilt only when something they show changes.
     // `theme` from useUnistyles is a fresh proxy on every render, so the memo keys on the colors it reads.
@@ -254,16 +272,15 @@ export const SessionView = React.memo((props: { id: string }) => {
                 hasRuns={hasRuns}
                 runningTaskCount={runningTaskCount}
                 onOpenRuns={handleOpenSessionRuns}
-                // The + opens /new pre-filled with this session's machine and path,
-                // which only works on a machine of my own — a session shared with me
-                // points at the owner's.
-                onNewSession={isSharedSession ? undefined : handleNewSession}
+                onNewSession={headerNewSession}
+                menu={headerMenu}
+                onOpenMenu={openHeaderMenu}
             />
         ) : undefined,
     }), [
         shouldHideHeader, shouldUseTransparentNativeHeader, isNarrowPhone, headerProps, leftAlignTitleWidth,
         headerTitleWidth, headerSubtitleColor, headerTintColor, handleBackPress, hasSession, hasRuns, runningTaskCount, handleOpenSessionRuns,
-        isSharedSession, handleNewSession, headerCliUpgrade,
+        headerNewSession, headerCliUpgrade, headerMenu, openHeaderMenu,
     ]);
 
     return (
@@ -291,6 +308,14 @@ export const SessionView = React.memo((props: { id: string }) => {
 
             {/* Native header config — iOS uses system header, Android/Web go through createHeader */}
             <Stack.Screen options={screenOptions} />
+            {headerArchiveMenu}
+            {headerMenu && (
+                <ActionMenuModal
+                    visible={headerMenuVisible}
+                    items={headerMenu}
+                    onClose={closeHeaderMenu}
+                />
+            )}
 
             {/* Content based on state */}
             <View style={{ flex: 1 }}>
@@ -1671,6 +1696,12 @@ function SessionViewLoaded({ sessionId, session, headerInset, listUnderHeader }:
 }
 
 
+/**
+ * The chat header's two buttons: delegations or a new session, then the avatar. A tap on either
+ * does what it always did; a long press on either opens the header's menu — on iOS natively, out
+ * of the button pressed, as the sessions list's "+" in the same capsule does; elsewhere as a sheet
+ * (`onOpenMenu`).
+ */
 const ChatHeaderRight = React.memo((props: {
     avatarId?: string;
     isConnected?: boolean;
@@ -1681,23 +1712,19 @@ const ChatHeaderRight = React.memo((props: {
     runningTaskCount: number;
     onOpenRuns: () => void;
     onNewSession?: () => void;
+    menu: ActionMenuItem[] | null;
+    onOpenMenu: () => void;
 }) => {
     const { theme } = useUnistyles();
+    const menu = props.menu ? { items: props.menu, onOpen: props.onOpenMenu } : undefined;
     return (
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             {props.hasRuns ? (
-                <Pressable
+                <HeaderButton
                     onPress={props.onOpenRuns}
-                    hitSlop={15}
-                    accessibilityRole="button"
+                    menu={menu}
                     accessibilityLabel={t('settings.orchestratorOpenRuns')}
-                    style={{
-                        width: 38,
-                        height: 38,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginRight: HEADER_LEADING_ACTION_MARGIN,
-                    }}
+                    leading
                 >
                     <Ionicons
                         name="layers-outline"
@@ -1726,53 +1753,33 @@ const ChatHeaderRight = React.memo((props: {
                             </Text>
                         </View>
                     )}
-                </Pressable>
+                </HeaderButton>
             ) : props.onNewSession ? (
-                <Pressable
+                <HeaderButton
                     onPress={props.onNewSession}
-                    hitSlop={15}
-                    accessibilityRole="button"
+                    menu={menu}
                     accessibilityLabel={t('newSession.startNewSessionInFolder')}
-                    style={{
-                        width: 38,
-                        height: 38,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginRight: HEADER_LEADING_ACTION_MARGIN,
-                    }}
+                    leading
                 >
                     <Ionicons
                         name="add"
                         size={26}
                         color={theme.colors.header.tint}
                     />
-                </Pressable>
+                </HeaderButton>
             ) : null}
             {props.onAvatarPress && props.cliUpgrade ? (
-                <Pressable
+                <HeaderButton
                     onPress={props.onAvatarPress}
-                    hitSlop={15}
-                    accessibilityRole="button"
+                    menu={menu}
                     accessibilityLabel={t('sessionInfo.sessionUpgradeBanner', { version: props.cliUpgrade })}
-                    style={{
-                        width: 38,
-                        height: 38,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                    }}
                 >
                     <Ionicons name="arrow-up-circle-outline" size={30} color={theme.colors.box.success.text} />
-                </Pressable>
+                </HeaderButton>
             ) : props.avatarId && props.onAvatarPress && (
-                <Pressable
+                <HeaderButton
                     onPress={props.onAvatarPress}
-                    hitSlop={15}
-                    style={{
-                        width: 38,
-                        height: 38,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                    }}
+                    menu={menu}
                 >
                     <Avatar
                         id={props.avatarId}
@@ -1780,8 +1787,52 @@ const ChatHeaderRight = React.memo((props: {
                         monochrome={!props.isConnected}
                         hideBadges
                     />
-                </Pressable>
+                </HeaderButton>
             )}
         </View>
     );
 });
+
+function HeaderButton({ leading, accessibilityLabel, menu, onPress, children }: {
+    onPress: () => void;
+    /** Opened on a long press; `onOpen` shows it where there is no native menu. */
+    menu?: { items: ActionMenuItem[]; onOpen: () => void };
+    accessibilityLabel?: string;
+    /** The leading button keeps a gap to the avatar. */
+    leading?: boolean;
+    children: React.ReactNode;
+}) {
+    const style = {
+        width: 38,
+        height: 38,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: leading ? HEADER_LEADING_ACTION_MARGIN : 0,
+    } as const;
+    if (menu) {
+        return (
+            <NativeMenu
+                items={menu.items}
+                activation="longPress"
+                onPress={onPress}
+                onFallbackOpen={menu.onOpen}
+                style={style}
+            >
+                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }} accessible accessibilityRole="button" accessibilityLabel={accessibilityLabel}>
+                    {children}
+                </View>
+            </NativeMenu>
+        );
+    }
+    return (
+        <Pressable
+            onPress={onPress}
+            hitSlop={15}
+            accessibilityRole="button"
+            accessibilityLabel={accessibilityLabel}
+            style={style}
+        >
+            {children}
+        </Pressable>
+    );
+}

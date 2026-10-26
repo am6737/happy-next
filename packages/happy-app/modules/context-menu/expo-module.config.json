@@ -1,6 +1,6 @@
 {
   "platforms": ["apple"],
   "apple": {
-    "modules": ["HappyContextMenuModule", "HappyDropZoneModule"]
+    "modules": ["HappyContextMenuModule", "HappyDropZoneModule", "HappyMenuButtonModule"]
   }
 }

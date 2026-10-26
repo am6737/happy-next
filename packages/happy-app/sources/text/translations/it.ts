@@ -782,6 +782,9 @@ export const it: TranslationStructure = {
         sessionSpawningFailed: 'Avvio sessione non riuscito - nessun ID sessione restituito.',
         startingSession: 'Avvio sessione...',
         startNewSessionInFolder: 'Nuova sessione qui',
+        // The chat header's menu: a new session on this one's machine and folder, or one picked on the new-session screen
+        menuNewSessionHere: 'Nuova sessione qui',
+        menuNewSessionElsewhere: 'Nuova sessione…',
         failedToStart: 'Impossibile avviare la sessione. Assicurati che il daemon sia in esecuzione sulla macchina di destinazione.',
         sessionTimeout: 'Avvio sessione scaduto. La macchina potrebbe essere lenta o il daemon potrebbe non rispondere.',
         notConnectedToServer: 'Non connesso al server. Controlla la tua connessione Internet.',
@@ -1136,6 +1139,8 @@ export const it: TranslationStructure = {
         thinkingSince: 'Pensando da',
         cliVersion: 'Versione CLI',
         cliUpgradeAvailable: 'Nuova versione CLI disponibile',
+        // The chat header menu's row that upgrades the session
+        menuUpgradeSession: ({ version }: { version: string }) => `Aggiorna a CLI v${version}`,
         cliUpgradeAvailableSubtitle: 'Tocca per riavviare la sessione con l\'ultima versione del CLI',
         sessionUpgradeBanner: ({ version }: { version: string }) => `Questa sessione può essere aggiornata alla CLI v${version}`,
         cliUpgradeInProgress: 'Aggiornamento in corso...',

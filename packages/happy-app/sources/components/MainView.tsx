@@ -357,15 +357,18 @@ const HeaderRight = React.memo(({ activeTab, onDootaskCreate, onSessionsNewSessi
         const cliLabel = cliUpdateLabel(cliUpdate);
         return (
             <View style={styles.headerButtons}>
-                <Pressable
+                {/* A long press anywhere on the capsule opens the "+" menu, out of the button pressed */}
+                <NativeMenu
+                    items={sessionsCreateItems ?? []}
+                    activation="longPress"
                     onPress={onCliUpdatePress}
-                    hitSlop={15}
-                    style={[styles.capsuleButton, styles.capsuleLeadingButton]}
-                    accessibilityRole="button"
-                    accessibilityLabel={cliLabel}
+                    onFallbackOpen={onSessionsCreate ?? (() => {})}
+                    style={styles.capsuleLeadingButton}
                 >
-                    <CliUpdateIcon update={cliUpdate} size={24} />
-                </Pressable>
+                    <View style={styles.capsuleButton} accessible accessibilityRole="button" accessibilityLabel={cliLabel}>
+                        <CliUpdateIcon update={cliUpdate} size={24} />
+                    </View>
+                </NativeMenu>
                 {/* The native iOS menu of the header's own "+", here opened from a custom button */}
                 <NativeMenu
                     items={sessionsCreateItems ?? []}
@@ -522,8 +525,9 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
     const handleSessionsNewSession = newSessionItem.disabled ? undefined : newSessionItem.onPress;
     const cliUpdate = useSelectedMachineCliUpdate(sessionScope.selection);
     const cliUpdateColor = useCliUpdateColor(cliUpdate.update);
-    // With the update as a dot on the "+", its menu has a row that opens it
-    const sessionsMenuItems = React.useMemo(() => CLI_UPDATE_AS_DOT && cliUpdate.update.state !== 'none'
+    // While the machine's CLI has an update, the "+" menu has a row that opens it, whether the update
+    // shows as a dot on the "+" or as its own icon beside it
+    const sessionsMenuItems = React.useMemo(() => cliUpdate.update.state !== 'none'
         ? [...sessionsCreateItems, {
             label: cliUpdateLabel(cliUpdate.update),
             icon: cliUpdate.update.state === 'failed'
@@ -531,6 +535,7 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
                 : { ionicon: 'arrow-up-circle-outline', sfSymbol: 'arrow.up.circle' },
             color: cliUpdateColor,
             onPress: cliUpdate.open,
+            startsSection: true,
         } satisfies ActionMenuItem]
         : sessionsCreateItems, [sessionsCreateItems, cliUpdate.update, cliUpdate.open, cliUpdateColor]);
     // On iOS a CLI update takes the "+" out of the native header items, into a custom view beside it
@@ -689,7 +694,7 @@ export const MainView = React.memo(({ variant }: MainViewProps) => {
                             onDootaskCreate={handleCreatePress}
                             onSessionsNewSession={handleSessionsNewSession}
                             onSessionsCreate={handleSessionsCreatePress}
-                            sessionsCreateItems={sessionsCreateItems}
+                            sessionsCreateItems={sessionsMenuItems}
                             cliUpdate={cliUpdate.update}
                             onCliUpdatePress={cliUpdate.open}
                             onScanPress={launchScanner}

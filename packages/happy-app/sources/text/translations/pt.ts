@@ -786,6 +786,9 @@ export const pt: TranslationStructure = {
         notConnectedToServer: 'Não conectado ao servidor. Verifique sua conexão com a internet.',
         startingSession: 'Iniciando sessão...',
         startNewSessionInFolder: 'Nova sessão aqui',
+        // The chat header's menu: a new session on this one's machine and folder, or one picked on the new-session screen
+        menuNewSessionHere: 'Nova sessão aqui',
+        menuNewSessionElsewhere: 'Nova sessão…',
         noMachineSelected: 'Por favor, selecione uma máquina para iniciar a sessão',
         noPathSelected: 'Por favor, selecione um diretório para iniciar a sessão',
         selectAgent: 'Selecionar tipo de sessão',
@@ -1137,6 +1140,8 @@ export const pt: TranslationStructure = {
         thinkingSince: 'Pensando desde',
         cliVersion: 'Versão do CLI',
         cliUpgradeAvailable: 'Nova versão do CLI disponível',
+        // The chat header menu's row that upgrades the session
+        menuUpgradeSession: ({ version }: { version: string }) => `Atualizar para CLI v${version}`,
         cliUpgradeAvailableSubtitle: 'Toque para reiniciar a sessão com o CLI mais recente',
         sessionUpgradeBanner: ({ version }: { version: string }) => `Esta sessão pode ser atualizada para a CLI v${version}`,
         cliUpgradeInProgress: 'Atualizando...',

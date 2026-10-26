@@ -746,6 +746,9 @@ export const ru: TranslationStructure = {
         notConnectedToServer: 'Нет подключения к серверу. Проверьте интернет-соединение.',
         startingSession: 'Запуск сессии...',
         startNewSessionInFolder: 'Новая сессия здесь',
+        // The chat header's menu: a new session on this one's machine and folder, or one picked on the new-session screen
+        menuNewSessionHere: 'Новая сессия здесь',
+        menuNewSessionElsewhere: 'Новая сессия…',
         noMachineSelected: 'Пожалуйста, выберите машину для запуска сессии',
         noPathSelected: 'Пожалуйста, выберите директорию для запуска сессии',
         selectAgent: 'Выберите тип сессии',
@@ -931,6 +934,8 @@ export const ru: TranslationStructure = {
         thinkingSince: 'Думает с',
         cliVersion: 'Версия CLI',
         cliUpgradeAvailable: 'Доступна новая версия CLI',
+        // The chat header menu's row that upgrades the session
+        menuUpgradeSession: ({ version }: { version: string }) => `Обновить до CLI v${version}`,
         cliUpgradeAvailableSubtitle: 'Нажмите, чтобы перезапустить сессию с последней версией CLI',
         sessionUpgradeBanner: ({ version }: { version: string }) => `Эту сессию можно обновить до CLI v${version}`,
         cliUpgradeInProgress: 'Обновление...',

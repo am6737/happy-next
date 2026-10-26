@@ -785,6 +785,9 @@ export const ja: TranslationStructure = {
         sessionSpawningFailed: 'セッションの生成に失敗しました - セッションIDが返されませんでした。',
         startingSession: 'セッションを開始中...',
         startNewSessionInFolder: 'このフォルダで新しいセッション',
+        // The chat header's menu: a new session on this one's machine and folder, or one picked on the new-session screen
+        menuNewSessionHere: 'このフォルダで新しいセッション',
+        menuNewSessionElsewhere: '新しいセッション…',
         failedToStart: 'セッションの開始に失敗しました。ターゲットマシンでデーモンが実行中か確認してください。',
         sessionTimeout: 'セッションの開始がタイムアウトしました。マシンが遅いか、デーモンが応答していない可能性があります。',
         notConnectedToServer: 'サーバーに接続されていません。インターネット接続を確認してください。',
@@ -1139,6 +1142,8 @@ export const ja: TranslationStructure = {
         thinkingSince: '思考開始時刻',
         cliVersion: 'CLIバージョン',
         cliUpgradeAvailable: '新しい CLI バージョンが利用可能',
+        // The chat header menu's row that upgrades the session
+        menuUpgradeSession: ({ version }: { version: string }) => `CLI v${version} にアップグレード`,
         cliUpgradeAvailableSubtitle: 'タップして最新の CLI でセッションを再起動',
         sessionUpgradeBanner: ({ version }: { version: string }) => `このセッションは CLI v${version} にアップグレードできます`,
         cliUpgradeInProgress: 'アップグレード中...',

@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import type { NativeStackHeaderItemMenuAction } from '@react-navigation/native-stack';
+import type { NativeStackHeaderItemMenu, NativeStackHeaderItemMenuAction } from '@react-navigation/native-stack';
 import type { ActionMenuItem } from '@/components/ActionMenu';
 import { isRunningOnMac } from '@/utils/platform';
 import { t } from '@/text';
@@ -32,7 +32,7 @@ export function headerMenuOptions(items: ActionMenuItem[] | null, options: { dis
         // while its rows stay the same, so only a choice of one value is one.
         multiselectable: !items.every(item => typeof item.selected === 'boolean'),
         hapticFeedback: options.haptic,
-        items: items.map(headerMenuAction),
+        items: headerMenuItems(items),
     };
     const item = {
         label: options.label ?? t('common.more'),
@@ -45,6 +45,20 @@ export function headerMenuOptions(items: ActionMenuItem[] | null, options: { dis
             ? { type: 'button' as const, onPress: options.onPress, ...item }
             : { type: 'menu' as const, ...item }],
     };
+}
+
+/**
+ * The rows of a native header menu. Rows marked `startsSection` open a new group, each group an
+ * inline submenu that the system sets apart with a divider; a menu of one group stays flat.
+ */
+export function headerMenuItems(items: ActionMenuItem[]): NativeStackHeaderItemMenu['menu']['items'] {
+    const sections: ActionMenuItem[][] = [];
+    for (const item of items) {
+        if (item.startsSection || sections.length === 0) sections.push([]);
+        sections[sections.length - 1].push(item);
+    }
+    if (sections.length <= 1) return items.map(headerMenuAction);
+    return sections.map(section => ({ type: 'submenu' as const, label: '', inline: true, items: section.map(headerMenuAction) }));
 }
 
 function headerMenuAction(item: ActionMenuItem): NativeStackHeaderItemMenuAction {

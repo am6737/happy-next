@@ -793,6 +793,9 @@ export const en = {
         sessionSpawningFailed: 'Session spawning failed - no session ID returned.',
         startingSession: 'Starting session...',
         startNewSessionInFolder: 'New session here',
+        // The chat header's menu: a new session on this one's machine and folder, or one picked on the new-session screen
+        menuNewSessionHere: 'New session here',
+        menuNewSessionElsewhere: 'New session…',
         failedToStart: 'Failed to start session. Make sure the daemon is running on the target machine.',
         sessionTimeout: 'Session startup timed out. The machine may be slow or the daemon may not be responding.',
         notConnectedToServer: 'Not connected to server. Check your internet connection.',
@@ -1148,6 +1151,8 @@ export const en = {
         thinkingSince: 'Thinking Since',
         cliVersion: 'CLI Version',
         cliUpgradeAvailable: 'New CLI Version Available',
+        // The chat header menu's row that upgrades the session
+        menuUpgradeSession: ({ version }: { version: string }) => `Upgrade to CLI v${version}`,
         cliUpgradeAvailableSubtitle: 'Tap to restart session with the latest CLI',
         sessionUpgradeBanner: ({ version }: { version: string }) => `This session can be upgraded to CLI v${version}`,
         cliUpgradeInProgress: 'Upgrading...',

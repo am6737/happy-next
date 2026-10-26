@@ -125,7 +125,10 @@ public final class HappyContextMenuView: ExpoView, UIContextMenuInteractionDeleg
     let title = (menu?["title"] as? String) ?? ""
     return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { [weak self] _ in
       guard let self else { return nil }
-      return UIMenu(title: title, children: specs.compactMap { self.element(from: $0) })
+      let children = specs.compactMap { spec in
+        HappyMenuElements.element(from: spec) { [weak self] id in self?.select(id) }
+      }
+      return UIMenu(title: title, children: children)
     }
   }
 
@@ -239,68 +242,6 @@ public final class HappyContextMenuView: ExpoView, UIContextMenuInteractionDeleg
     guard let id = pendingActionId else { return }
     pendingActionId = nil
     onSelectAction(["id": id])
-  }
-
-  // MARK: - Building the menu
-
-  private func element(from spec: [String: Any]) -> UIMenuElement? {
-    let title = (spec["title"] as? String) ?? ""
-    let image = image(for: spec)
-
-    if (spec["type"] as? String) == "group" {
-      let children = ((spec["children"] as? [[String: Any]]) ?? []).compactMap { element(from: $0) }
-      guard !children.isEmpty else { return nil }
-      var options: UIMenu.Options = []
-      if (spec["inline"] as? Bool) == true {
-        options.insert(.displayInline)
-      }
-      if (spec["palette"] as? Bool) == true {
-        if #available(iOS 17.0, *) {
-          options.insert(.displayAsPalette)
-        }
-      }
-      return UIMenu(title: title, image: image, options: options, children: children)
-    }
-
-    guard let id = spec["id"] as? String else { return nil }
-    let action = UIAction(title: title, image: image) { [weak self] _ in
-      self?.select(id)
-    }
-    var attributes: UIMenuElement.Attributes = []
-    if (spec["destructive"] as? Bool) == true {
-      attributes.insert(.destructive)
-    }
-    if (spec["disabled"] as? Bool) == true {
-      attributes.insert(.disabled)
-    }
-    action.attributes = attributes
-    action.state = (spec["checked"] as? Bool) == true ? .on : .off
-    return action
-  }
-
-  /// An SF Symbol, drawn in `imageColor` when one is given (a palette swatch keeps its colour).
-  private func image(for spec: [String: Any]) -> UIImage? {
-    guard let name = spec["systemImage"] as? String, let symbol = UIImage(systemName: name) else {
-      return nil
-    }
-    if let hex = spec["imageColor"] as? String, let color = color(fromHex: hex) {
-      return symbol.withTintColor(color, renderingMode: .alwaysOriginal)
-    }
-    return symbol
-  }
-
-  private func color(fromHex hex: String) -> UIColor? {
-    var digits = hex.trimmingCharacters(in: .whitespaces)
-    if digits.hasPrefix("#") {
-      digits.removeFirst()
-    }
-    guard digits.count == 6, let value = UInt32(digits, radix: 16) else { return nil }
-    return UIColor(
-      red: CGFloat((value >> 16) & 0xFF) / 255,
-      green: CGFloat((value >> 8) & 0xFF) / 255,
-      blue: CGFloat(value & 0xFF) / 255,
-      alpha: 1
-    )
   }
 
   // MARK: - Preview

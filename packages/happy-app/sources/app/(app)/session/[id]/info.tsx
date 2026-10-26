@@ -16,7 +16,7 @@ import * as Clipboard from 'expo-clipboard';
 import { Modal } from '@/modal';
 import { hapticsLight } from '@/components/haptics';
 import { showCopiedToast } from '@/components/Toast';
-import { sessionArchive, sessionKill, sessionDelete, machineForkClaudeSession, machineForkGeminiSession, machineForkCodexSession, machineForkQoderSession, machineSpawnNewSession, sessionUpdateMetadataFields } from '@/sync/ops';
+import { sessionDelete, machineForkClaudeSession, machineForkGeminiSession, machineForkCodexSession, machineForkQoderSession, machineSpawnNewSession, sessionUpdateMetadataFields } from '@/sync/ops';
 import { leaveSharedSession } from '@/sync/apiSharing';
 import { pushWorktreeBranch, mergeWorktreeBranch, createWorktreePR, cleanupWorktree, cleanupWorkspace, getLocalBranches, getCurrentBranch } from '@/utils/worktreeOps';
 import { getWorkspaceRepos } from '@/utils/workspaceRepos';
@@ -26,6 +26,8 @@ import { ActionMenuItem } from '@/components/ActionMenu';
 import { buildReviewPrompt } from '@/utils/reviewPrompt';
 import { sync } from '@/sync/sync';
 import { useOpenTerminal } from '@/hooks/useOpenTerminal';
+import { useSessionArchive } from '@/hooks/useSessionArchive';
+import { useSessionUpgrade } from '@/hooks/useSessionUpgrade';
 import { useUnistyles } from 'react-native-unistyles';
 import { layout } from '@/components/layout';
 import { t } from '@/text';
@@ -181,90 +183,10 @@ function SessionInfoContent({ session, leavingRef }: { session: Session; leaving
     // metadata update, and until then a stopped Codex session still reads as archivable.
     const [archived, setArchived] = React.useState(false);
 
-    // Use HappyAction for archiving - it handles errors automatically
-    const [archivingSession, performArchive] = useHappyAction(async () => {
-        const previousActive = storage.getState().sessions[session.id]?.active ?? session.active;
-        storage.getState().updateSessionActivity(session.id, false);
-
-        const result = await sessionArchive(session.id);
-        const errorMessage = result.message || t('sessionInfo.failedToArchiveSession');
-
-        // Archiving is idempotent: if RPC target is gone, session is effectively already archived.
-        if (!result.success && /RPC method not available/i.test(errorMessage)) {
-            await sync.clearSessionMessageCache(session.id);
-            setArchived(true);
-            return;
-        }
-
-        if (!result.success) {
-            storage.getState().updateSessionActivity(session.id, previousActive);
-            throw new HappyError(errorMessage, false);
-        }
-
-        await sync.clearSessionMessageCache(session.id);
-        if (result.nativeArchiveError) throw new HappyError(t('sessionInfo.codexArchiveFailed') + ': ' + result.nativeArchiveError, false);
-        // Success - stay on this page: an archived session offers delete here.
-        setArchived(true);
+    // Success - stay on this page: an archived session offers delete here.
+    const { archiving: archivingSession, archive: handleArchiveSession, archiveMenu } = useSessionArchive(session, {
+        onArchived: () => setArchived(true),
     });
-
-    // Archive menu for worktree sessions
-    const [archiveMenuVisible, setArchiveMenuVisible] = React.useState(false);
-    const [archiveMenuItems, setArchiveMenuItems] = React.useState<ActionMenuItem[]>([]);
-
-    const handleArchiveSession = useCallback(() => {
-        if (isWorktree && worktreeMachineId) {
-            const machineId = worktreeMachineId;
-            setArchiveMenuItems([
-                {
-                    label: t('sessionInfo.worktree.archiveKeepWorktree'),
-                    onPress: () => { setArchiveMenuVisible(false); performArchive(); },
-                },
-                {
-                    label: t('sessionInfo.worktree.archiveCleanupKeepBranch'),
-                    onPress: async () => {
-                        setArchiveMenuVisible(false);
-                        try {
-                            if (isMultiRepo && session.metadata?.workspacePath) {
-                                await cleanupWorkspace(machineId, session.metadata.workspacePath, workspaceRepos, false);
-                            } else if (worktreeBasePath && worktreeBranch) {
-                                await cleanupWorktree(machineId, worktreeBasePath, worktreeBranch, false);
-                            }
-                        } catch (e) { console.warn('Worktree cleanup failed:', e); }
-                        await performArchive();
-                    },
-                },
-                {
-                    label: t('sessionInfo.worktree.archiveCleanupDeleteBranch'),
-                    destructive: true,
-                    onPress: async () => {
-                        setArchiveMenuVisible(false);
-                        try {
-                            if (isMultiRepo && session.metadata?.workspacePath) {
-                                await cleanupWorkspace(machineId, session.metadata.workspacePath, workspaceRepos, true);
-                            } else if (worktreeBasePath && worktreeBranch) {
-                                await cleanupWorktree(machineId, worktreeBasePath, worktreeBranch, true);
-                            }
-                        } catch (e) { console.warn('Worktree cleanup failed:', e); }
-                        await performArchive();
-                    },
-                },
-            ]);
-            setArchiveMenuVisible(true);
-        } else {
-            Modal.alert(
-                t('sessionInfo.archiveSession'),
-                t('sessionInfo.archiveSessionConfirm'),
-                [
-                    { text: t('common.cancel'), style: 'cancel' },
-                    {
-                        text: t('sessionInfo.archiveSession'),
-                        style: 'destructive',
-                        onPress: performArchive
-                    }
-                ]
-            );
-        }
-    }, [performArchive, session.metadata, isWorktree, isMultiRepo, worktreeMachineId, worktreeBasePath, worktreeBranch, workspaceRepos]);
 
     // Use HappyAction for deletion - it handles errors automatically
     const [deletingSession, performDelete] = useHappyAction(async () => {
@@ -430,105 +352,7 @@ function SessionInfoContent({ session, leavingRef }: { session: Session; leaving
 
     const handleRenameSession = useCallback(() => promptRenameSession(session), [session]);
 
-    const [isUpgrading, setIsUpgrading] = React.useState(false);
-    const handleUpgradeSession = useCallback(async () => {
-        if (!session || !machineId || isUpgrading) return;
-
-        // Block if session is thinking
-        if (session.thinking) {
-            Modal.alert(
-                t('sessionInfo.cliUpgradeAvailable'),
-                t('sessionInfo.cliUpgradeSessionBusy')
-            );
-            return;
-        }
-
-        // Confirm before upgrading
-        const confirmed = await Modal.confirm(
-            t('sessionInfo.cliUpgradeAvailable'),
-            t('sessionInfo.cliUpgradeConfirm')
-        );
-        if (!confirmed) return;
-
-        // Set upgrading flag only after confirmation
-        setIsUpgrading(true);
-        storage.getState().setSessionUpgrading(session.id, true);
-
-        try {
-            // Kill old session
-            await sessionKill(session.id);
-
-            // Fork and resume — mirrors the "resume session" flow exactly
-            const flavor = session.metadata?.flavor;
-            let resumeSessionId: string | undefined;
-            let agent: 'claude' | 'codex' | 'gemini' | 'qoder' = 'claude';
-
-            if (flavor === 'gemini') {
-                const forkResult = await machineForkGeminiSession(machineId, session.id);
-                if (!forkResult.success || !forkResult.newSessionId) {
-                    Modal.alert(t('common.error'), forkResult.errorMessage || t('claudeHistory.resumeFailed'));
-                    return;
-                }
-                resumeSessionId = forkResult.newSessionId;
-                agent = 'gemini';
-            } else if (flavor === 'codex' && session.metadata?.codexSessionId) {
-                const forkResult = await machineForkCodexSession(machineId, session.metadata.codexSessionId);
-                if (!forkResult.success || !forkResult.newFilePath) {
-                    Modal.alert(t('common.error'), forkResult.errorMessage || t('claudeHistory.resumeFailed'));
-                    return;
-                }
-                resumeSessionId = forkResult.newFilePath;
-                agent = 'codex';
-            } else if (flavor === 'qoder' && session.metadata?.qoderSessionId) {
-                const forkResult = await machineForkQoderSession(machineId, session.metadata.qoderSessionId, session.metadata.path || '');
-                if (!forkResult.success || !forkResult.newSessionId) {
-                    Modal.alert(t('common.error'), forkResult.errorMessage || t('claudeHistory.resumeFailed'));
-                    return;
-                }
-                resumeSessionId = forkResult.newSessionId;
-                agent = 'qoder';
-            } else if (session.metadata?.claudeSessionId) {
-                const forkResult = await machineForkClaudeSession(machineId, session.metadata.claudeSessionId);
-                if (!forkResult.success || !forkResult.newSessionId) {
-                    Modal.alert(t('common.error'), forkResult.errorMessage || t('claudeHistory.resumeFailed'));
-                    return;
-                }
-                resumeSessionId = forkResult.newSessionId;
-                agent = 'claude';
-            } else {
-                Modal.alert(t('common.error'), t('claudeHistory.resumeFailed'));
-                return;
-            }
-
-            // Spawn new session with forked data
-            const result = await machineSpawnNewSession({
-                machineId,
-                directory: session.metadata?.path || '',
-                agent,
-                resumeSessionId,
-                skipForkSession: true,
-                sessionTitle: session.metadata?.summary?.text,
-                forkedFrom: { sessionId: session.id, title: session.metadata?.summary?.text || getSessionName(session), contextWindowSize: session.agentState?.contextWindowSize ?? undefined },
-            });
-
-            if (result.type !== 'success') {
-                Modal.alert(t('common.error'), result.type === 'error' ? result.errorMessage : 'Upgrade failed');
-                return;
-            }
-
-            await copySessionMetadata(session, result.sessionId).catch(e => console.warn('copySessionMetadata failed:', e));
-            copySessionModeSettings(session, result.sessionId);
-
-            // Navigate to the new session: go back to root then push new session
-            try { router.dismissAll(); } catch (_) { /* stack may already be at root */ }
-            router.push(`/session/${result.sessionId}`);
-        } catch (e) {
-            Modal.alert(t('common.error'), e instanceof Error ? e.message : 'Unknown error');
-        } finally {
-            setIsUpgrading(false);
-            storage.getState().setSessionUpgrading(session.id, false);
-        }
-    }, [session, machineId, router, isUpgrading]);
+    const { upgrading: isUpgrading, upgrade: handleUpgradeSession } = useSessionUpgrade(session);
 
     const [pushingBranch, handlePushBranch] = useHappyAction(async () => {
         if (!worktreeMachineId || !worktreeBranch || !worktreePath) return;
@@ -1330,12 +1154,7 @@ function SessionInfoContent({ session, leavingRef }: { session: Session; leaving
                 items={branchPickerItems}
                 onClose={() => setBranchPickerVisible(false)}
             />
-            <ActionMenuModal
-                visible={archiveMenuVisible}
-                title={t('sessionInfo.worktree.archiveWorktreeConfirm')}
-                items={archiveMenuItems}
-                onClose={() => setArchiveMenuVisible(false)}
-            />
+            {archiveMenu}
             <ActionMenuModal
                 visible={cleanupMenuVisible}
                 title={t('sessionInfo.worktree.cleanupConfirm')}

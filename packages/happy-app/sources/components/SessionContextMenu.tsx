@@ -27,14 +27,12 @@ import {
     machineForkQoderSession,
     machineSpawnNewSession,
     sessionDelete,
-    sessionArchive,
 } from '@/sync/ops';
-import { cleanupWorkspace, cleanupWorktree } from '@/utils/worktreeOps';
-import { getWorkspaceRepos } from '@/utils/workspaceRepos';
 import { ActionMenuModal } from './ActionMenuModal';
 import { ActionMenuItem } from './ActionMenu';
 import { getSessionQuickActionKinds, getSessionQuickActionSections, SessionQuickActionKind } from './sessionQuickActions';
 import { useOpenTerminal } from '@/hooks/useOpenTerminal';
+import { useSessionArchive } from '@/hooks/useSessionArchive';
 import { SessionContextMenuPortal } from './SessionContextMenuPortal';
 import { useSessionHoverCard } from './SessionHoverCard';
 import { sessionHoverCard } from './sessionHoverCardController';
@@ -174,32 +172,12 @@ function useSessionQuickActions(session: Session) {
     const canToggleRead = isUnread || canMarkUnread;
     const isPinned = useSessionPinned(session.id);
     const forkingSession = useSessionForking(session.id);
-    const [archiveMenuVisible, setArchiveMenuVisible] = React.useState(false);
-    const [archiveMenuItems, setArchiveMenuItems] = React.useState<ActionMenuItem[]>([]);
-
     const dismissToHome = useDismissToHome();
     const dismissIfViewing = useDismissToHomeIfViewing(session.id);
 
-    const [, performArchive] = useHappyAction(async () => {
-        // Home first: the flip to inactive empties the composer on the session's own screen, so
-        // archiving it would reflow that screen for the whole archive round trip before it pops.
-        dismissIfViewing();
-        const previousActive = storage.getState().sessions[session.id]?.active ?? session.active;
-        storage.getState().updateSessionActivity(session.id, false);
-        const result = await sessionArchive(session.id);
-        const errorMessage = result.message || t('sessionInfo.failedToArchiveSession');
-        // Archiving is idempotent: if RPC target is gone, session is effectively already archived.
-        if (!result.success && /RPC method not available/i.test(errorMessage)) {
-            await sync.clearSessionMessageCache(session.id);
-            return;
-        }
-        if (!result.success) {
-            storage.getState().updateSessionActivity(session.id, previousActive);
-            throw new HappyError(errorMessage, false);
-        }
-        await sync.clearSessionMessageCache(session.id);
-        if (result.nativeArchiveError) throw new HappyError(t('sessionInfo.codexArchiveFailed') + ': ' + result.nativeArchiveError, false);
-    });
+    // Home first: the flip to inactive empties the composer on the session's own screen, so
+    // archiving it would reflow that screen for the whole archive round trip before it pops.
+    const { archive: handleArchive, archiveMenu } = useSessionArchive(session, { beforeArchive: dismissIfViewing });
 
     const [, performDelete] = useHappyAction(async () => {
         const result = await sessionDelete(session.id);
@@ -227,54 +205,6 @@ function useSessionQuickActions(session: Session) {
     const handleOpenTerminal = React.useCallback(() => {
         openSession(session);
     }, [openSession, session]);
-
-    const handleArchive = React.useCallback(() => {
-        const workspaceRepos = getWorkspaceRepos(session.metadata);
-        const machineId = session.metadata?.machineId;
-        if (workspaceRepos.length > 0 && machineId) {
-            const firstRepo = workspaceRepos[0];
-            setArchiveMenuItems([
-                { label: t('sessionInfo.worktree.archiveKeepWorktree'), onPress: performArchive },
-                {
-                    label: t('sessionInfo.worktree.archiveCleanupKeepBranch'),
-                    onPress: async () => {
-                        try {
-                            if (workspaceRepos.length > 1 && session.metadata?.workspacePath) {
-                                await cleanupWorkspace(machineId, session.metadata.workspacePath, workspaceRepos, false);
-                            } else if (firstRepo?.basePath && firstRepo.branchName) {
-                                await cleanupWorktree(machineId, firstRepo.basePath, firstRepo.branchName, false);
-                            }
-                        } catch (error) {
-                            console.warn('Worktree cleanup failed:', error);
-                        }
-                        await performArchive();
-                    },
-                },
-                {
-                    label: t('sessionInfo.worktree.archiveCleanupDeleteBranch'),
-                    destructive: true,
-                    onPress: async () => {
-                        try {
-                            if (workspaceRepos.length > 1 && session.metadata?.workspacePath) {
-                                await cleanupWorkspace(machineId, session.metadata.workspacePath, workspaceRepos, true);
-                            } else if (firstRepo?.basePath && firstRepo.branchName) {
-                                await cleanupWorktree(machineId, firstRepo.basePath, firstRepo.branchName, true);
-                            }
-                        } catch (error) {
-                            console.warn('Worktree cleanup failed:', error);
-                        }
-                        await performArchive();
-                    },
-                },
-            ]);
-            setArchiveMenuVisible(true);
-            return;
-        }
-        Modal.alert(t('sessionInfo.archiveSession'), t('sessionInfo.archiveSessionConfirm'), [
-            { text: t('common.cancel'), style: 'cancel' },
-            { text: t('sessionInfo.archiveSession'), style: 'destructive', onPress: performArchive },
-        ]);
-    }, [performArchive, session.metadata]);
 
     const handleRename = React.useCallback(async () => {
         if (await promptRenameSession(session)) {
@@ -480,14 +410,7 @@ function useSessionQuickActions(session: Session) {
     return {
         actions,
         archive: handleArchive,
-        archiveMenu: (
-            <ActionMenuModal
-                visible={archiveMenuVisible}
-                title={t('sessionInfo.worktree.archiveWorktreeConfirm')}
-                items={archiveMenuItems}
-                onClose={() => setArchiveMenuVisible(false)}
-            />
-        ),
+        archiveMenu,
     };
 }
 
