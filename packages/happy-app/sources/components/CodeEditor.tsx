@@ -148,6 +148,8 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(({
                 mixedContentMode="always"
                 keyboardDisplayRequiresUserAction={false}
                 hideKeyboardAccessoryView={Platform.OS === 'ios'}
+                // Unset, the new architecture passes 0 and a flick stops the moment the finger lifts
+                decelerationRate="normal"
                 style={{ flex: 1, backgroundColor: 'transparent' }}
             />
         </View>

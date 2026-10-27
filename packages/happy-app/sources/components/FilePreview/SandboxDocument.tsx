@@ -76,6 +76,8 @@ export function SandboxDocument({
                 onError={onError}
                 onContentProcessDidTerminate={onError}
                 onRenderProcessGone={onError}
+                // Unset, the new architecture passes 0 and a flick stops the moment the finger lifts
+                decelerationRate="normal"
                 style={{ flex: 1, backgroundColor: dark ? DARK_DOCUMENT_BACKGROUND : '#fff' }}
             />
         </View>

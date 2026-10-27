@@ -32,6 +32,8 @@ export default React.memo(() => {
                 scrollEnabled={true}
                 // Keeps the page's end clear of the home indicator; the web view defaults to "never".
                 contentInsetAdjustmentBehavior="automatic"
+                // Unset, the new architecture passes 0 and a flick stops the moment the finger lifts
+                decelerationRate="normal"
             />
         </View>
     );
