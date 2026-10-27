@@ -29,6 +29,7 @@ import { t } from '@/text';
 
 import { softHeaderOptions } from '@/components/navigation/softHeader';
 import { hasWebTextSelection } from '@/components/webTextSelection';
+import { CopyableText } from '@/components/LongPressCopy';
 
 // Mouse users copy what they select here (the desktop app is web too); a drag-select must not count as a tap on the card it is in
 const IS_WEB = Platform.OS === 'web';
@@ -163,6 +164,15 @@ function buildTaskTitle(task: OrchestratorTaskRecord): string {
     return resolveOrchestratorTaskName(task) ?? t('settings.orchestratorProviderTask', { provider: task.provider });
 }
 
+/** A prompt or an output; a long press on it opens the text-selection page (web selects in place). */
+function MonoText({ text }: { text: string | null | undefined; }) {
+    const styles = stylesheet;
+    if (!text) {
+        return <Text style={styles.monoText}>-</Text>;
+    }
+    return <CopyableText style={styles.monoText}>{text}</CopyableText>;
+}
+
 function ExecutionResult({ execution }: { execution: OrchestratorExecutionRecord; }) {
     if (execution.provider === 'transfer') {
         return <TransferExecutionResult execution={execution} />;
@@ -185,7 +195,7 @@ function TransferExecutionResult({ execution }: { execution: OrchestratorExecuti
                         {!!execution.errorCode && <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorLabelErrorCode')}: {execution.errorCode}</Text>}
                         {execution.errorMessage
                             ? <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorLabelErrorMessage')}: {execution.errorMessage}</Text>
-                            : <Text style={styles.monoText} selectable>{execution.outputSummary || '-'}</Text>}
+                            : <MonoText text={execution.outputSummary} />}
                     </>
                 )}
         </>
@@ -211,9 +221,9 @@ function ShellExecutionResult({ execution }: { execution: OrchestratorExecutionR
             {!!execution.errorCode && <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorLabelErrorCode')}: {execution.errorCode}</Text>}
             {!!execution.errorMessage && <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorLabelErrorMessage')}: {execution.errorMessage}</Text>}
             <Text selectable={IS_WEB} style={styles.detailLabel}>{t('settings.orchestratorStdoutTitle')}</Text>
-            <Text style={styles.monoText} selectable>{execution.outputText || '-'}</Text>
+            <MonoText text={execution.outputText} />
             <Text selectable={IS_WEB} style={styles.detailLabel}>{t('settings.orchestratorStderrTitle')}</Text>
-            <Text style={styles.monoText} selectable>{execution.stderrText || '-'}</Text>
+            <MonoText text={execution.stderrText} />
         </>
     );
 }
@@ -247,7 +257,7 @@ function AgentExecutionResult({ execution, provider }: { execution: Orchestrator
             <Text selectable={IS_WEB} style={styles.detailLabel}>{title}</Text>
             {!!execution.errorCode && <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorLabelErrorCode')}: {execution.errorCode}</Text>}
             {!!execution.errorMessage && <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorLabelErrorMessage')}: {execution.errorMessage}</Text>}
-            <Text style={styles.monoText} selectable>{text || '-'}</Text>
+            <MonoText text={text} />
         </>
     );
 }
@@ -479,7 +489,7 @@ export default function OrchestratorTaskDetailScreen() {
                             <View style={[styles.card, styles.executionDetailsCard]}>
                                 <View style={styles.executionDetails}>
                                     <Text selectable={IS_WEB} style={[styles.detailLabel, { marginTop: 0 }]}>{promptLabel}</Text>
-                                    <Text style={styles.monoText} selectable>{taskPrompt || '-'}</Text>
+                                    <MonoText text={taskPrompt} />
                                 </View>
                             </View>
                         );
@@ -501,7 +511,7 @@ export default function OrchestratorTaskDetailScreen() {
                                 {!!execution.signal && <Text selectable={IS_WEB} style={styles.row}>{t('settings.orchestratorLabelSignal')}: {execution.signal}</Text>}
 
                                 <Text selectable={IS_WEB} style={styles.detailLabel}>{promptLabel}</Text>
-                                <Text style={styles.monoText} selectable>{executionPrompt || '-'}</Text>
+                                <MonoText text={executionPrompt} />
 
                                 <ExecutionResult execution={execution} />
                             </View>
