@@ -14,3 +14,16 @@ describe('hasWebTextSelection', () => {
         expect(hasWebTextSelection(() => ({ toString: () => 'hello' }))).toBe(true);
     });
 });
+
+describe('hasWebTextSelection default reader', () => {
+    it('is false when window has no getSelection (React Native)', () => {
+        const g = globalThis as { window?: unknown };
+        const previous = g.window;
+        g.window = {};
+        try {
+            expect(hasWebTextSelection()).toBe(false);
+        } finally {
+            g.window = previous;
+        }
+    });
+});
