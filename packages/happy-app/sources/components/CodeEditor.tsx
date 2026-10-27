@@ -148,8 +148,9 @@ export const CodeEditor = React.forwardRef<CodeEditorHandle, CodeEditorProps>(({
                 mixedContentMode="always"
                 keyboardDisplayRequiresUserAction={false}
                 hideKeyboardAccessoryView={Platform.OS === 'ios'}
-                // Unset, the new architecture passes 0 and a flick stops the moment the finger lifts
-                decelerationRate="normal"
+                // Unset, the new architecture passes 0 on iOS and a flick stops the moment the finger lifts;
+                // only iOS turns "normal" into a number, Android casts the string and crashes
+                decelerationRate={Platform.OS === 'ios' ? 'normal' : undefined}
                 style={{ flex: 1, backgroundColor: 'transparent' }}
             />
         </View>

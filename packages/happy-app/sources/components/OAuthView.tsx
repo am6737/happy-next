@@ -334,8 +334,9 @@ export const OAuthViewRender = React.memo((props: {
                 javaScriptEnabled={true}
                 domStorageEnabled={true}
                 userAgent='Mozilla/5.0 (iPhone; CPU iPhone OS 10_3 like Mac OS X) AppleWebKit/602.1.50 (KHTML, like Gecko) CriOS/56.0.2924.75 Mobile/14E5239e Safari/602.1'
-                // Unset, the new architecture passes 0 and a flick stops the moment the finger lifts
-                decelerationRate="normal"
+                // Unset, the new architecture passes 0 on iOS and a flick stops the moment the finger lifts;
+                // only iOS turns "normal" into a number, Android casts the string and crashes
+                decelerationRate={Platform.OS === 'ios' ? 'normal' : undefined}
             />
             {webViewLoading && (
                 <Animated.View style={[styles.loadingOverlay, webViewLoadingAnimatedStyle, { backgroundColor: props.backgroundColor }]}>

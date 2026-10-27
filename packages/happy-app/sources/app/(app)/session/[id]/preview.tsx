@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { consumePreviewHtml } from '@/components/tools/previewHtmlStore';
 import { StyleSheet } from 'react-native-unistyles';
@@ -32,8 +32,9 @@ export default React.memo(() => {
                 scrollEnabled={true}
                 // Keeps the page's end clear of the home indicator; the web view defaults to "never".
                 contentInsetAdjustmentBehavior="automatic"
-                // Unset, the new architecture passes 0 and a flick stops the moment the finger lifts
-                decelerationRate="normal"
+                // Unset, the new architecture passes 0 on iOS and a flick stops the moment the finger lifts;
+                // only iOS turns "normal" into a number, Android casts the string and crashes
+                decelerationRate={Platform.OS === 'ios' ? 'normal' : undefined}
             />
         </View>
     );

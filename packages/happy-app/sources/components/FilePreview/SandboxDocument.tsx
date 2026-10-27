@@ -76,8 +76,9 @@ export function SandboxDocument({
                 onError={onError}
                 onContentProcessDidTerminate={onError}
                 onRenderProcessGone={onError}
-                // Unset, the new architecture passes 0 and a flick stops the moment the finger lifts
-                decelerationRate="normal"
+                // Unset, the new architecture passes 0 on iOS and a flick stops the moment the finger lifts;
+                // only iOS turns "normal" into a number, Android casts the string and crashes
+                decelerationRate={Platform.OS === 'ios' ? 'normal' : undefined}
                 style={{ flex: 1, backgroundColor: dark ? DARK_DOCUMENT_BACKGROUND : '#fff' }}
             />
         </View>
