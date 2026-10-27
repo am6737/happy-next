@@ -1818,7 +1818,7 @@ function HeaderButton({ leading, accessibilityLabel, menu, onPress, children }: 
                 onFallbackOpen={menu.onOpen}
                 style={style}
             >
-                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }} accessible accessibilityRole="button" accessibilityLabel={accessibilityLabel}>
+                <View style={{ flex: 1, alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center' }} accessible accessibilityRole="button" accessibilityLabel={accessibilityLabel}>
                     {children}
                 </View>
             </NativeMenu>
